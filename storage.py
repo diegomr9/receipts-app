@@ -13,7 +13,11 @@ class DB:
         if PG:
             import psycopg
             from psycopg.rows import dict_row
-            self.c = psycopg.connect(URL, row_factory=dict_row, connect_timeout=15)
+            for i in range(3):  # Neon may be waking from auto-suspend
+                try: self.c = psycopg.connect(URL, row_factory=dict_row, connect_timeout=10); break
+                except psycopg.OperationalError:
+                    if i == 2: raise
+                    import time; time.sleep(1 + i)
         else:
             self.c = sqlite3.connect(SQLITE_PATH); self.c.row_factory = sqlite3.Row
         _init(self)
