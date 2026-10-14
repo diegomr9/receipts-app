@@ -67,6 +67,7 @@ main{max-width:1180px;margin:0 auto;padding:0 clamp(20px,5vw,64px) 120px}
 .drop:hover,.drop.over{background:#fff;border-color:var(--ink2)}
 .drop input{position:absolute;opacity:0;width:1px;height:1px}
 .drop .serif{font-size:26px;margin:10px 0 4px}
+.drop .pick{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:22px}.drop .pick .btn{min-width:160px;background:var(--paper)}.drop .pick .btn:hover{background:var(--ink);color:var(--sand);border-color:var(--ink)}
 .drop .hint{font-size:13px;color:var(--stone)}
 .upbar{display:flex;gap:24px;align-items:end;margin-top:22px}.upbar .field{flex:1}.upbar .cur{flex:0 0 250px}
 .drop .files{margin-top:10px;font-size:13px;color:var(--ink2)}
@@ -169,9 +170,12 @@ INDEX = HEAD + """<title>Receipts · Expenses to claim</title></head><body>""" +
 
 <section class=section id=add><div class=section-head><div><div class=label>New</div><h2>Add a receipt</h2></div></div>
 <form method=post action="/upload" enctype=multipart/form-data id=up>
-<label class=drop id=drop><input type=file name=file accept="image/*,application/pdf" capture=environment multiple required id=file>
-<div class=label>Photo, screenshot or PDF</div><div class=serif>Tap to take a photo or choose a file</div>
-<div class=hint>Details are filled in automatically; you can review them afterwards.</div><div class=files id=files></div></label>
+<div class=drop id=drop><input type=file name=file accept="image/*,application/pdf,.heic,.heif" multiple id=file>
+<input type=file name=file accept="image/*,.heic,.heif" capture=environment id=cam>
+<div class=label>Photo, screenshot or PDF</div><div class=serif>Tap to choose a receipt</div>
+<div class=hint>Choose from your photos or files, or take a new photo. Details are filled in automatically.</div>
+<div class=pick><label for=file class="btn ghost">Choose file</label><label for=cam class="btn ghost">Take photo</label></div>
+<div class=files id=files></div></div>
 <div class=upbar><label class="field cur"><span class=label>Currency</span><select name=currency>{{curopts(last_cur)}}</select></label><label class=field><span class=label>Title / description</span><input name=title placeholder="e.g. Aquapark for Argentina" maxlength=200></label><button class=btn>Upload receipt</button></div></form></section>
 
 <section class=section><div class=section-head><div><div class=label>Archive</div><h2>All receipts</h2></div></div>
@@ -198,11 +202,14 @@ INDEX = HEAD + """<title>Receipts · Expenses to claim</title></head><body>""" +
 <p class=note>Exports include the selected receipts or, if none are selected, all filtered ones.</p></form></section></main>
 <script>
 const all=document.getElementById('all');all&&all.addEventListener('change',()=>document.querySelectorAll('.ck').forEach(c=>c.checked=all.checked));
-const f=document.getElementById('file'),d=document.getElementById('drop'),o=document.getElementById('files');
-f.addEventListener('change',()=>{o.textContent=[...f.files].map(x=>x.name).join(' · ')});
+const f=document.getElementById('file'),cam=document.getElementById('cam'),d=document.getElementById('drop'),o=document.getElementById('files');
+const show=()=>{o.textContent=[...f.files,...cam.files].map(x=>x.name).join(' · ')};
+f.addEventListener('change',show);cam.addEventListener('change',show);
+d.addEventListener('click',ev=>{if(!ev.target.closest('label,input'))f.click()});
 ['dragover','dragenter'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.add('over')}));
 ['dragleave','drop'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.remove('over')}));
-d.addEventListener('drop',ev=>{f.files=ev.dataTransfer.files;f.dispatchEvent(new Event('change'))});
+d.addEventListener('drop',ev=>{f.files=ev.dataTransfer.files;show()});
+document.getElementById('up').addEventListener('submit',ev=>{if(!f.files.length&&!cam.files.length){ev.preventDefault();o.textContent='Please choose a file or take a photo first.'}});
 </script></body></html>"""
 
 EDIT = HEAD + """<title>Receipt · {{r.title or r.merchant}}</title></head><body>""" + TOP + """<main><div class=edit>

@@ -1,6 +1,9 @@
 import os, re, io, csv, sqlite3, subprocess, uuid, datetime
 from flask import Flask, request, redirect, url_for, render_template_string, send_from_directory, Response, g, flash
 from PIL import Image
+try:
+    from pillow_heif import register_heif_opener; register_heif_opener()  # iPhone HEIC/HEIF photos
+except ImportError: pass
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.environ.get("DATA_DIR", BASE)
 UP = os.path.join(DATA, "uploads"); TH = os.path.join(DATA, "thumbs")
@@ -55,7 +58,8 @@ def make_preview(path):
         if not os.path.exists(src): return None
         img = Image.open(src)
     else:
-        img = Image.open(path)
+        from PIL import ImageOps
+        img = ImageOps.exif_transpose(Image.open(path))  # respect phone rotation
     img = img.convert("RGB"); img.thumbnail((1400,1400))
     fn = name + "_p.jpg"; img.save(os.path.join(TH, fn), quality=85)
     return fn
