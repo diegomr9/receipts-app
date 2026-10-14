@@ -111,9 +111,9 @@ def build_pdf(rows, thumbs_dir):
                 ("LEFTPADDING", (0, 0), (-1, -1), 12), ("RIGHTPADDING", (0, 0), (-1, -1), 12), ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))
             el.append(nc)
         if r["preview"]:
-            p = os.path.join(thumbs_dir, r["preview"])
-            if os.path.exists(p):
-                iw, ih = Image.open(p).size; s = min((W - 20) / iw, 165*mm / ih)
+            raw = thumbs_dir(r["preview"])
+            if raw:
+                p = io.BytesIO(raw); iw, ih = Image.open(p).size; p.seek(0); s = min((W - 20) / iw, 165*mm / ih)
                 el.append(_card(RLImage(p, iw*s, ih*s), W))
     doc.build(el)
     return buf.getvalue()

@@ -5,10 +5,6 @@ try:
     from pillow_heif import register_heif_opener; register_heif_opener()  # iPhone HEIC/HEIF photos
 except ImportError: pass
 BASE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.environ.get("DATA_DIR", BASE)
-UP = os.path.join(DATA, "uploads"); TH = os.path.join(DATA, "thumbs")
-for d in (UP, TH): os.makedirs(d, exist_ok=True)
-DB = os.path.join(DATA, "receipts.db")
 CATS = ["meals","travel","transport","lodging","supplies","tips","other"]
 STATUSES = ["to submit","submitted","reimbursed"]
 import json, datetime as _dt
@@ -33,55 +29,14 @@ def require_login():
 @app.errorhandler(413)
 def too_big(e): return "File too large (max 25 MB). <a href='/'>Back</a>", 413
 
+import storage
 def db():
-    if "db" not in g:
-        g.db = sqlite3.connect(DB); g.db.row_factory = sqlite3.Row
-        g.db.execute("""CREATE TABLE IF NOT EXISTS receipts(id INTEGER PRIMARY KEY, date TEXT, merchant TEXT,
-          amount REAL, currency TEXT DEFAULT 'EUR', category TEXT DEFAULT 'other', notes TEXT DEFAULT '',
-          status TEXT DEFAULT 'to submit', file TEXT, preview TEXT, ocr_text TEXT, created TEXT)""")
-        cols = [c[1] for c in g.db.execute("PRAGMA table_info(receipts)")]
-        if "title" not in cols: g.db.execute("ALTER TABLE receipts ADD COLUMN title TEXT DEFAULT ''")
-        if "ocr_note" not in cols: g.db.execute("ALTER TABLE receipts ADD COLUMN ocr_note TEXT DEFAULT ''")
+    if "db" not in g: g.db = storage.DB()
     return g.db
 @app.teardown_appcontext
 def close(e):
     d = g.pop("db", None)
-    if d: d.commit(); d.close()
-
-def make_preview(path):
-    """Return filename of a PNG preview (thumbnail dir) for image or PDF."""
-    name = uuid.uuid4().hex
-    if path.lower().endswith(".pdf"):
-        out = os.path.join(TH, name)
-        subprocess.run(["pdftoppm","-png","-r","120","-f","1","-l","1","-singlefile",path,out], check=False)
-        src = out + ".png"
-        if not os.path.exists(src): return None
-        img = Image.open(src)
-    else:
-        from PIL import ImageOps
-        img = ImageOps.exif_transpose(Image.open(path))  # respect phone rotation
-    img = img.convert("RGB"); img.thumbnail((1400,1400))
-    fn = name + "_p.jpg"; img.save(os.path.join(TH, fn), quality=85)
-    return fn
-
-def ocr(preview):
-    try:
-        import pytesseract
-        return pytesseract.image_to_string(Image.open(os.path.join(TH, preview)))
-    except Exception: return ""
-
-def extract_text(path, prev):
-    """OCR text. PDFs: use the text layer of all pages if present, otherwise OCR every page (max 10)."""
-    if path.lower().endswith(".pdf"):
-        try:
-            t = subprocess.run(["pdftotext", "-layout", path, "-"], capture_output=True, text=True, timeout=60).stdout
-            if len(t.strip()) > 20: return t
-            import tempfile, glob, pytesseract
-            with tempfile.TemporaryDirectory() as d:
-                subprocess.run(["pdftoppm", "-png", "-r", "200", "-l", "10", path, os.path.join(d, "p")], timeout=120)
-                return "\n".join(pytesseract.image_to_string(Image.open(p)) for p in sorted(glob.glob(os.path.join(d, "p*.png"))))
-        except Exception: return ""
-    return ocr(prev) if prev else ""
+    if d: d.close(commit=e is None)
 
 def parse(text):
     r = {}
@@ -116,15 +71,13 @@ def parse(text):
         if any(k in low for k in kws): r["category"] = cat; break
     return r
 
-def add_receipt(path, fields=None):
-    prev = make_preview(path)
-    text = extract_text(path, prev)
+def add_receipt(fs, fields=None):
+    file, prev, thumb, text = storage.ingest(db(), fs.read(), fs.filename)
     detected = parse(text); f = dict(detected); f.update({k: v for k, v in (fields or {}).items() if v})
     if detected.get("currency"): f["currency"] = detected["currency"]  # only set when confident
-    cur = db().execute("INSERT INTO receipts(ocr_note,title,date,merchant,amount,currency,category,notes,status,file,preview,ocr_text,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    return db().insert("INSERT INTO receipts(ocr_note,title,date,merchant,amount,currency,category,notes,status,file,preview,thumb,ocr_text,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (f.get("ocr_note",""), f.get("title",""), f.get("date", datetime.date.today().isoformat()), f.get("merchant",""), f.get("amount",0) or 0, f.get("currency","EUR"),
-         f.get("category","other"), f.get("notes",""), f.get("status","to submit"), os.path.basename(path), prev, text, datetime.datetime.now().isoformat()))
-    return cur.lastrowid
+         f.get("category","other"), f.get("notes",""), f.get("status","to submit"), file, prev, thumb, text, datetime.datetime.now().isoformat()))
 
 def query(args):
     sql, p = "SELECT * FROM receipts WHERE 1=1", []
@@ -168,7 +121,7 @@ def index():
         if r["status"] in totals:
             totals[r["status"]][r["currency"]] = totals[r["status"]].get(r["currency"],0) + r["amount"]; counts[r["status"]] += 1
     return render_template_string(INDEX, rows=rows, totals=totals, counts=counts, statuses=STATUSES, a=request.args, last_cur=session.get("cur", "EUR"),
-        used=[c for c, _ in cur_sorted({x[0]: 0 for x in db().execute("SELECT DISTINCT currency FROM receipts")})])
+        used=[c for c, _ in cur_sorted({x["currency"]: 0 for x in db().execute("SELECT DISTINCT currency FROM receipts")})])
 
 @app.post("/upload")
 def upload():
@@ -176,9 +129,7 @@ def upload():
     cur = (request.form.get("currency") or "EUR").upper()[:3]; session["cur"] = cur
     for f in request.files.getlist("file"):
         if not f.filename: continue
-        ext = os.path.splitext(f.filename)[1].lower() or ".jpg"
-        path = os.path.join(UP, uuid.uuid4().hex + ext); f.save(path)
-        last = add_receipt(path, {"title": request.form.get("title","").strip()[:200], "currency": cur})
+        last = add_receipt(f, {"title": request.form.get("title","").strip()[:200], "currency": cur})
     if last: flash("Receipt added · please review the details"); return redirect(url_for("edit", rid=last))
     return redirect("/")
 
@@ -201,7 +152,7 @@ def new_expense():
         if v["status"] not in STATUSES: v["status"] = "to submit"
         if not errs:
             session["cur"] = v["currency"]
-            db().execute("INSERT INTO receipts(title,date,merchant,amount,currency,category,notes,status,file,preview,ocr_text,ocr_note,created) VALUES(?,?,?,?,?,?,?,?,NULL,NULL,'','',?)",
+            db().insert("INSERT INTO receipts(title,date,merchant,amount,currency,category,notes,status,file,preview,thumb,ocr_text,ocr_note,created) VALUES(?,?,?,?,?,?,?,?,NULL,NULL,NULL,'','',?)",
                 (v["title"][:200], v["date"], "", amt, v["currency"], v["category"], v["notes"], v["status"], datetime.datetime.now().isoformat()))
             flash("Expense added"); return redirect("/")
     return render_template_string(NEW, v=v, errs=errs, cats=CATS, statuses=STATUSES)
@@ -212,14 +163,13 @@ def attach(rid):
     r = db().execute("SELECT * FROM receipts WHERE id=?", (rid,)).fetchone()
     up = request.files.get("file")
     if not r or not up or not up.filename: flash("Choose a file to attach"); return redirect(url_for("edit", rid=rid))
-    ext = os.path.splitext(up.filename)[1].lower() or ".jpg"
-    path = os.path.join(UP, uuid.uuid4().hex + ext); up.save(path)
-    prev = make_preview(path); text = extract_text(path, prev); d = parse(text)
+    file, prev, thumb, text = storage.ingest(db(), up.read(), up.filename); d = parse(text)
+    storage.delete_blobs(db(), *set(x for x in (r["file"], r["preview"], r["thumb"]) if x))
     merchant = r["merchant"] or d.get("merchant", "")
     amount = r["amount"] if r["amount"] else d.get("amount", 0)
     title = r["title"] or d.get("merchant", "")
-    db().execute("UPDATE receipts SET file=?,preview=?,ocr_text=?,ocr_note=?,merchant=?,amount=?,title=? WHERE id=?",
-                 (os.path.basename(path), prev, text, d.get("ocr_note", ""), merchant, amount, title, rid))
+    db().execute("UPDATE receipts SET file=?,preview=?,thumb=?,ocr_text=?,ocr_note=?,merchant=?,amount=?,title=? WHERE id=?",
+                 (file, prev, thumb, text, d.get("ocr_note", ""), merchant, amount, title, rid))
     flash("Receipt attached"); return redirect(url_for("edit", rid=rid))
 
 @app.route("/edit/<int:rid>", methods=["GET","POST"])
@@ -234,6 +184,8 @@ def edit(rid):
 
 @app.post("/delete/<int:rid>")
 def delete(rid):
+    r = db().execute("SELECT file,preview,thumb FROM receipts WHERE id=?", (rid,)).fetchone()
+    if r: storage.delete_blobs(db(), *set(x for x in (r["file"], r["preview"], r["thumb"]) if x))
     db().execute("DELETE FROM receipts WHERE id=?", (rid,)); flash("Receipt deleted"); return redirect("/")
 
 @app.post("/bulk")
@@ -256,13 +208,16 @@ def export_csv():
 @app.post("/export.pdf")
 def export_pdf():
     from pdfreport import build_pdf
-    return Response(build_pdf(selected(request.form), TH), mimetype="application/pdf",
+    load = lambda name: (storage.get_blob(db(), name) or (None, None))[1]
+    return Response(build_pdf(selected(request.form), load), mimetype="application/pdf",
                     headers={"Content-Disposition":"attachment; filename=expense_report.pdf"})
 
 @app.route("/uploads/<path:f>")
-def uploads(f): return send_from_directory(UP, f)
 @app.route("/thumbs/<path:f>")
-def thumbs(f): return send_from_directory(TH, f)
+def blob(f):
+    b = storage.get_blob(db(), f)
+    if not b: return ("Not found", 404)
+    return Response(b[1], mimetype=b[0], headers={"Cache-Control": "private, max-age=86400"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))

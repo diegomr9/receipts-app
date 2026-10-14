@@ -237,7 +237,7 @@ INDEX = HEAD + """<title>Expenses · Receipts</title></head><body>""" + TOP + ""
 <div class=thead><span></span><span></span><span>Receipt</span><span>Date</span><span>Category</span><span>Status</span><span class=ra>Amount</span></div>
 {% for r in rows %}<div class=row>
 <span class=ck-w><input type=checkbox class=ck name=ids value={{r.id}} aria-label="Select"></span>
-{% if r.file %}<a class=thumb href="/edit/{{r.id}}">{% if r.preview %}<img src="/thumbs/{{r.preview}}" alt="" loading=lazy>{% endif %}</a>{% else %}<a class="thumb norec" href="/edit/{{r.id}}" title="No receipt">""" + ICON_NOREC + """</a>{% endif %}
+{% if r.file %}<a class=thumb href="/edit/{{r.id}}">{% if r.preview %}<img src="/thumbs/{{r.thumb or r.preview}}" alt="" loading=lazy>{% endif %}</a>{% else %}<a class="thumb norec" href="/edit/{{r.id}}" title="No receipt">""" + ICON_NOREC + """</a>{% endif %}
 <div class=main><a href="/edit/{{r.id}}" class=ttl style="display:block">{{r.title or r.merchant or 'Untitled'}}</a><div class=mer>{% if not r.file %}<span class=nobadge>No receipt</span>{% endif %}{{r.merchant or ('Manual expense' if not r.file else 'Unknown merchant')}}</div></div>
 <span class=date>{{fecha(r.date)}}</span>
 <span class=cat-c><span class=chip>{{CAT.get(r.category, r.category)}}</span></span>

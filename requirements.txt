@@ -4,3 +4,4 @@ pillow
 reportlab
 pytesseract
 pillow-heif
+psycopg[binary]
