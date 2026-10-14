@@ -139,9 +139,9 @@ def selected(form):
     if ids: return db().execute("SELECT * FROM receipts WHERE id IN (%s) ORDER BY date" % ",".join("?"*len(ids)), ids).fetchall()
     return list(reversed(query(form)))
 
-from ui import INDEX, EDIT, LOGIN, STATUS_ES, CAT_ES, fecha, money, CUR_MAIN, CUR_OTHER, CUR_INFO
+from ui import INDEX, EDIT, LOGIN, STATUS_ES, CAT_ES, fecha, money, CUR_MAIN, CUR_OTHER, CUR_INFO, cur_sorted, sym
 CODES = list(CUR_INFO)
-app.jinja_env.globals.update(ST=STATUS_ES, CAT=CAT_ES, fecha=fecha, money=money, CUR_MAIN=CUR_MAIN, CUR_OTHER=CUR_OTHER, CUR_INFO=CUR_INFO)
+app.jinja_env.globals.update(ST=STATUS_ES, CAT=CAT_ES, fecha=fecha, money=money, CUR_MAIN=CUR_MAIN, CUR_OTHER=CUR_OTHER, CUR_INFO=CUR_INFO, cur_sorted=cur_sorted, sym=sym)
 @app.route("/login", methods=["GET","POST"])
 def login():
     err = None
@@ -168,7 +168,7 @@ def index():
         if r["status"] in totals:
             totals[r["status"]][r["currency"]] = totals[r["status"]].get(r["currency"],0) + r["amount"]; counts[r["status"]] += 1
     return render_template_string(INDEX, rows=rows, totals=totals, counts=counts, statuses=STATUSES, a=request.args, last_cur=session.get("cur", "EUR"),
-        used=[x[0] for x in db().execute("SELECT DISTINCT currency FROM receipts ORDER BY currency")])
+        used=[c for c, _ in cur_sorted({x[0]: 0 for x in db().execute("SELECT DISTINCT currency FROM receipts")})])
 
 @app.post("/upload")
 def upload():

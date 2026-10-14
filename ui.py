@@ -16,6 +16,13 @@ CUR_INFO = {  # code: (symbol, name)
 CUR_MAIN = ["EUR", "USD", "MYR", "SGD"]
 CUR_OTHER = [c for c in CUR_INFO if c not in CUR_MAIN]
 
+CUR_ORDER = CUR_MAIN + CUR_OTHER
+def cur_sorted(d):
+    """dict currency->amount, ordered EUR, USD, MYR, SGD, then the rest, unknown codes last."""
+    return sorted(d.items(), key=lambda kv: (CUR_ORDER.index(kv[0]) if kv[0] in CUR_ORDER else 999, kv[0]))
+def sym(c):
+    return CUR_INFO.get(c, (c,))[0]
+
 def fecha(d):
     try: y, m, dd = d.split("-"); return f"{int(dd)} {MESES[int(m)-1]} {y}"
     except Exception: return d or ""
@@ -74,6 +81,11 @@ main{max-width:1240px;margin:0 auto;padding:28px 24px 80px}
 .stat .v{font-size:22px;font-weight:600;letter-spacing:-.02em;margin-top:8px;line-height:1.25;font-variant-numeric:tabular-nums}
 .stat .v small{font-size:12px;font-weight:500;color:var(--muted);margin-left:4px;letter-spacing:0}
 .stat .v.more{font-size:15px;margin-top:2px}
+.stat .lines{margin-top:8px;display:flex;flex-direction:column;gap:2px}
+.stat .ln{font-size:22px;font-weight:600;letter-spacing:-.02em;line-height:1.25;font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:6px}
+.stat .multi .ln{font-size:17px}
+.stat .ln .sy{color:var(--muted);font-weight:500;font-size:.72em;min-width:2.2em}
+.stat .ln small{font-size:11.5px;font-weight:500;color:var(--muted);margin-left:auto;letter-spacing:.02em}
 .stat .f{margin-top:8px;font-size:12.5px;color:var(--muted)}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .d-to{background:#f79009}.d-submitted{background:#2e90fa}.d-reimbursed{background:#12b76a}.d-all{background:var(--accent)}
@@ -194,7 +206,7 @@ INDEX = HEAD + """<title>Expenses · Receipts</title></head><body>""" + TOP + ""
 <div class=ph><div><h1>Expenses</h1><p>Track receipts from upload to reimbursement.</p></div>
 <a href="#add" class=btn>""" + ICON_PLUS + """ New receipt</a></div>
 <section class=stats>{% for s in statuses %}<div class="card stat"><div class=k><span class="dot d-{{s.split()[0]}}"></span>{{ST[s]}}</div>
-{% for c,v in totals[s].items() %}<div class="v{{' more' if not loop.first}}">{{money(v)}}<small>{{c}}</small></div>{% else %}<div class=v>0.00</div>{% endfor %}
+{% set tl = cur_sorted(totals[s]) %}<div class="lines{{' multi' if tl|length > 1}}">{% for c,v in tl %}<div class=ln><span class=sy>{{sym(c)}}</span>{{money(v)}}<small>{{c}}</small></div>{% else %}<div class=ln>0.00</div>{% endfor %}</div>
 <div class=f>{{counts[s]}} {{'receipt' if counts[s]==1 else 'receipts'}}</div></div>{% endfor %}
 <div class="card stat"><div class=k><span class="dot d-all"></span>All receipts</div><div class=v>{{rows|length}}</div>
 <div class=f>{{used|length}} {{'currency' if used|length==1 else 'currencies'}}{% if used %} · {{used|join(', ')}}{% endif %}</div></div></section>
