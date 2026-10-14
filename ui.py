@@ -5,6 +5,17 @@ CAT_ES = {"meals": "Meals", "travel": "Travel", "transport": "Transport", "lodgi
           "supplies": "Supplies", "other": "Other"}
 MESES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
+CUR_INFO = {  # code: (symbol, name)
+ "EUR": ("€", "Euro"), "USD": ("$", "US Dollar"), "MYR": ("RM", "Malaysian Ringgit"), "SGD": ("S$", "Singapore Dollar"),
+ "GBP": ("£", "British Pound"), "CHF": ("Fr", "Swiss Franc"), "JPY": ("¥", "Japanese Yen"), "CNY": ("¥", "Chinese Yuan"),
+ "HKD": ("HK$", "Hong Kong Dollar"), "AUD": ("A$", "Australian Dollar"), "CAD": ("C$", "Canadian Dollar"),
+ "NZD": ("NZ$", "New Zealand Dollar"), "THB": ("฿", "Thai Baht"), "IDR": ("Rp", "Indonesian Rupiah"),
+ "PHP": ("₱", "Philippine Peso"), "VND": ("₫", "Vietnamese Dong"), "KRW": ("₩", "South Korean Won"),
+ "INR": ("₹", "Indian Rupee"), "AED": ("AED", "UAE Dirham"), "MXN": ("MX$", "Mexican Peso"),
+ "ARS": ("AR$", "Argentine Peso"), "BRL": ("R$", "Brazilian Real")}
+CUR_MAIN = ["EUR", "USD", "MYR", "SGD"]
+CUR_OTHER = [c for c in CUR_INFO if c not in CUR_MAIN]
+
 def fecha(d):
     try: y, m, dd = d.split("-"); return f"{int(dd)} {MESES[int(m)-1]} {y}"
     except Exception: return d or ""
@@ -57,7 +68,7 @@ main{max-width:1180px;margin:0 auto;padding:0 clamp(20px,5vw,64px) 120px}
 .drop input{position:absolute;opacity:0;width:1px;height:1px}
 .drop .serif{font-size:26px;margin:10px 0 4px}
 .drop .hint{font-size:13px;color:var(--stone)}
-.upbar{display:flex;gap:24px;align-items:end;margin-top:22px}.upbar .field{flex:1}
+.upbar{display:flex;gap:24px;align-items:end;margin-top:22px}.upbar .field{flex:1}.upbar .cur{flex:0 0 250px}
 .drop .files{margin-top:10px;font-size:13px;color:var(--ink2)}
 /* fields */
 .field{display:flex;flex-direction:column;gap:6px;min-width:0}
@@ -66,7 +77,7 @@ input,select,textarea{font:300 15px var(--sans);color:var(--ink);background:tran
 select{background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23585858'/%3E%3C/svg%3E") right 2px center no-repeat;padding-right:18px}
 input:focus,select:focus,textarea:focus{border-color:var(--ink)}
 textarea{resize:vertical;line-height:1.5}
-.filters{display:grid;grid-template-columns:1.2fr 1fr 1fr auto;gap:24px;align-items:end}
+.filters{display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr auto;gap:24px;align-items:end}
 /* buttons */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;font:400 11px var(--sans);letter-spacing:.22em;text-transform:uppercase;
  padding:15px 28px;border:1px solid var(--ink);background:var(--ink);color:var(--sand);cursor:pointer;border-radius:0;
@@ -130,7 +141,7 @@ details pre{white-space:pre-wrap;font:300 13px/1.6 var(--sans);color:var(--ink2)
 @media (max-width:820px){
  .top nav{gap:18px}.brand{font-size:16px;letter-spacing:.34em}
  .totals{grid-template-columns:1fr}.totals>div+div{border-left:0;border-top:1px solid var(--line)}.totals>div{padding:24px 10px}
- .filters{grid-template-columns:1fr 1fr}.filters .field:first-child{grid-column:1/-1}.filters>div{grid-column:1/-1}.filters>div .btn.ghost{flex:1}
+ .filters{grid-template-columns:1fr 1fr}.filters .field:first-child{grid-column:1/-1}.upbar .cur{flex:none}.filters>div{grid-column:1/-1}.filters>div .btn.ghost{flex:1}
  .r{grid-template-columns:22px 64px 1fr auto;gap:14px;row-gap:4px}
  .r .thumb{width:64px;height:80px;grid-row:span 2}
  .r .cat{display:none}.r .st{grid-column:3}.r .amt{font-size:22px;grid-row:1;grid-column:4}
@@ -143,14 +154,16 @@ details pre{white-space:pre-wrap;font:300 13px/1.6 var(--sans);color:var(--ink2)
 @media (max-width:420px){.top nav a.hide-s{display:none}.form-grid{grid-template-columns:1fr}}
 </style>"""
 
-TOP = """<header class="top fade"><a href="/" class=brand>Receipts</a><nav><a href="/#add" class=hide-s>Add</a><a href="/logout">Sign out</a></nav></header>
+TOP = """{% macro curopts(sel, extra=None) %}{% for c in CUR_MAIN %}<option value="{{c}}" {{'selected' if sel==c}}>{{c}} · {{CUR_INFO[c][0]}} · {{CUR_INFO[c][1]}}</option>{% endfor %}
+<option disabled>──────────</option>{% for c in CUR_OTHER %}<option value="{{c}}" {{'selected' if sel==c}}>{{c}} · {{CUR_INFO[c][0]}} · {{CUR_INFO[c][1]}}</option>{% endfor %}
+{% if sel and sel not in CUR_INFO %}<option value="{{sel}}" selected>{{sel}}</option>{% endif %}{% endmacro %}<header class="top fade"><a href="/" class=brand>Receipts</a><nav><a href="/#add" class=hide-s>Add</a><a href="/logout">Sign out</a></nav></header>
 {% for m in get_flashed_messages() %}<div class=flash>{{m}}</div>{% endfor %}"""
 
 INDEX = HEAD + """<title>Receipts · Expenses to claim</title></head><body>""" + TOP + """<main>
 <section class="hero fade"><div class=label>Work expenses</div><h1>My receipts</h1>
 <p>A quiet record of every expense, from receipt to reimbursement.</p><hr class=rule></section>
 <section class="totals fade">{% for s in statuses %}<div><div class=label>{{ST[s]}}</div>
-<div class=num>{% for c,v in totals[s].items() %}{{money(v)}}<small>{{c}}</small>{% if not loop.last %}<br>{% endif %}{% else %}0,00{% endfor %}</div>
+<div class=num>{% for c,v in totals[s].items() %}{{money(v)}}<small>{{c}}</small>{% if not loop.last %}<br>{% endif %}{% else %}0.00{% endfor %}</div>
 <div class=sub>{{counts[s]}} {{'receipt' if counts[s]==1 else 'receipts'}}</div></div>{% endfor %}</section>
 
 <section class=section id=add><div class=section-head><div><div class=label>New</div><h2>Add a receipt</h2></div></div>
@@ -158,17 +171,18 @@ INDEX = HEAD + """<title>Receipts · Expenses to claim</title></head><body>""" +
 <label class=drop id=drop><input type=file name=file accept="image/*,application/pdf" capture=environment multiple required id=file>
 <div class=label>Photo, screenshot or PDF</div><div class=serif>Tap to take a photo or choose a file</div>
 <div class=hint>Details are filled in automatically; you can review them afterwards.</div><div class=files id=files></div></label>
-<div class=upbar><label class=field><span class=label>Title / description</span><input name=title placeholder="e.g. Aquapark for Argentina" maxlength=200></label><button class=btn>Upload receipt</button></div></form></section>
+<div class=upbar><label class="field cur"><span class=label>Currency</span><select name=currency>{{curopts(last_cur)}}</select></label><label class=field><span class=label>Title / description</span><input name=title placeholder="e.g. Aquapark for Argentina" maxlength=200></label><button class=btn>Upload receipt</button></div></form></section>
 
 <section class=section><div class=section-head><div><div class=label>Archive</div><h2>All receipts</h2></div></div>
 <form method=get class=filters>
 <label class=field><span class=label>Status</span><select name=status><option value="">All</option>{% for s in statuses %}<option value="{{s}}" {{'selected' if a.status==s}}>{{ST[s]}}</option>{% endfor %}</select></label>
 <label class=field><span class=label>From</span><input type=date name=start value="{{a.start or ''}}"></label>
 <label class=field><span class=label>To</span><input type=date name=end value="{{a.end or ''}}"></label>
-<div style="display:flex;gap:6px"><button class="btn ghost">Filter</button>{% if a.status or a.start or a.end %}<a href="/" class="btn link">Clear</a>{% endif %}</div></form>
+<label class=field><span class=label>Currency</span><select name=currency><option value="">All</option>{% for c in used %}<option value="{{c}}" {{'selected' if a.currency==c}}>{{c}} · {{CUR_INFO.get(c,(c,))[0]}}</option>{% endfor %}</select></label>
+<div style="display:flex;gap:6px"><button class="btn ghost">Filter</button>{% if a.status or a.start or a.end or a.currency %}<a href="/" class="btn link">Clear</a>{% endif %}</div></form>
 
 <form method=post style="margin-top:34px">
-<input type=hidden name=status value="{{a.status or ''}}"><input type=hidden name=start value="{{a.start or ''}}"><input type=hidden name=end value="{{a.end or ''}}">
+<input type=hidden name=status value="{{a.status or ''}}"><input type=hidden name=start value="{{a.start or ''}}"><input type=hidden name=end value="{{a.end or ''}}"><input type=hidden name=currency value="{{a.currency or ''}}">
 <div class=toolbar><label class="check label"><input type=checkbox id=all> Select all</label>
 <div class=group><button class="btn ghost" formaction="/bulk?to=submitted">Mark submitted</button><button class="btn ghost" formaction="/bulk?to=reimbursed">Mark reimbursed</button>
 <button class="btn" formaction="/export.csv">CSV</button><button class="btn" formaction="/export.pdf">PDF report</button></div></div>
@@ -200,7 +214,7 @@ EDIT = HEAD + """<title>Receipt · {{r.title or r.merchant}}</title></head><body
 <label class=field><span class=label>Date</span><input type=date name=date value="{{r.date}}"></label>
 <label class=field><span class=label>Category</span><select name=category>{% for c in cats %}<option value="{{c}}" {{'selected' if r.category==c}}>{{CAT[c]}}</option>{% endfor %}</select></label>
 <label class=field><span class=label>Amount</span><input type=number step=0.01 inputmode=decimal name=amount value="{{'%.2f'|format(r.amount)}}"></label>
-<label class=field><span class=label>Currency</span><input name=currency value="{{r.currency}}" maxlength=3 style="text-transform:uppercase"></label>
+<label class=field><span class=label>Currency</span><select name=currency>{{curopts(r.currency)}}</select></label>
 <label class="field full"><span class=label>Status</span><select name=status>{% for s in statuses %}<option value="{{s}}" {{'selected' if r.status==s}}>{{ST[s]}}</option>{% endfor %}</select></label>
 <label class="field full"><span class=label>Notes</span><textarea name=notes rows=3>{{r.notes}}</textarea></label></div>
 <div class=actions><button class=btn>Save</button><a href="/" class="btn ghost">Back</a>

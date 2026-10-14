@@ -86,8 +86,8 @@ def parse(text):
         n = re.findall(r"\d+[.,]\d{2}", text)
         if n: amt = max(n, key=lambda x: float(x.replace(",", ".")))
     if amt: r["amount"] = float(amt.replace(",", "."))
-    for cur, pat in [("EUR", r"€|EUR"), ("USD", r"\$|USD"), ("GBP", r"£|GBP")]:
-        if re.search(pat, text): r["currency"] = cur; break
+    cur = detect_currency(text)
+    if cur: r["currency"] = cur
     low = text.lower()
     for cat, kws in [("meals",["restaurant","cafe","coffee","lunch","dinner","food"]),("lodging",["hotel","inn","night"]),
                      ("travel",["airline","flight","train","rail"]),("transport",["taxi","uber","fuel","parking","metro"]),
@@ -95,10 +95,22 @@ def parse(text):
         if any(k in low for k in kws): r["category"] = cat; break
     return r
 
+def detect_currency(text):
+    """Return an ISO code only when the receipt is unambiguous; bare '$' or '¥' is not enough."""
+    hits = set()
+    for c in CODES:
+        if re.search(r"(?<![A-Z])%s(?![A-Z])" % c, text): hits.add(c)
+    for c, pat in [("EUR", "€"), ("GBP", "£"), ("INR", "₹"), ("KRW", "₩"), ("THB", "฿"), ("PHP", "₱"), ("VND", "₫"),
+                   ("MYR", r"\bRM\s?\d"), ("SGD", r"S\$"), ("USD", r"US\$"), ("HKD", r"HK\$"), ("AUD", r"\bA\$"),
+                   ("CAD", r"\bC\$"), ("NZD", r"NZ\$"), ("IDR", r"\bRp\.?\s?\d"), ("BRL", r"R\$")]:
+        if re.search(pat, text): hits.add(c)
+    return hits.pop() if len(hits) == 1 else None
+
 def add_receipt(path, fields=None):
     prev = make_preview(path)
     text = ocr(prev) if prev else ""
-    f = parse(text); f.update(fields or {})
+    detected = parse(text); f = dict(detected); f.update({k: v for k, v in (fields or {}).items() if v})
+    if detected.get("currency"): f["currency"] = detected["currency"]  # confident OCR wins
     cur = db().execute("INSERT INTO receipts(title,date,merchant,amount,currency,category,notes,status,file,preview,ocr_text,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
         (f.get("title",""), f.get("date", datetime.date.today().isoformat()), f.get("merchant",""), f.get("amount",0) or 0, f.get("currency","EUR"),
          f.get("category","other"), f.get("notes",""), f.get("status","to submit"), os.path.basename(path), prev, text, datetime.datetime.now().isoformat()))
@@ -109,6 +121,7 @@ def query(args):
     if args.get("status"): sql += " AND status=?"; p.append(args["status"])
     if args.get("start"): sql += " AND date>=?"; p.append(args["start"])
     if args.get("end"): sql += " AND date<=?"; p.append(args["end"])
+    if args.get("currency"): sql += " AND currency=?"; p.append(args["currency"])
     return db().execute(sql + " ORDER BY date DESC, id DESC", p).fetchall()
 
 def selected(form):
@@ -116,8 +129,9 @@ def selected(form):
     if ids: return db().execute("SELECT * FROM receipts WHERE id IN (%s) ORDER BY date" % ",".join("?"*len(ids)), ids).fetchall()
     return list(reversed(query(form)))
 
-from ui import INDEX, EDIT, LOGIN, STATUS_ES, CAT_ES, fecha, money
-app.jinja_env.globals.update(ST=STATUS_ES, CAT=CAT_ES, fecha=fecha, money=money)
+from ui import INDEX, EDIT, LOGIN, STATUS_ES, CAT_ES, fecha, money, CUR_MAIN, CUR_OTHER, CUR_INFO
+CODES = list(CUR_INFO)
+app.jinja_env.globals.update(ST=STATUS_ES, CAT=CAT_ES, fecha=fecha, money=money, CUR_MAIN=CUR_MAIN, CUR_OTHER=CUR_OTHER, CUR_INFO=CUR_INFO)
 @app.route("/login", methods=["GET","POST"])
 def login():
     err = None
@@ -143,16 +157,18 @@ def index():
     for r in rows:
         if r["status"] in totals:
             totals[r["status"]][r["currency"]] = totals[r["status"]].get(r["currency"],0) + r["amount"]; counts[r["status"]] += 1
-    return render_template_string(INDEX, rows=rows, totals=totals, counts=counts, statuses=STATUSES, a=request.args)
+    return render_template_string(INDEX, rows=rows, totals=totals, counts=counts, statuses=STATUSES, a=request.args, last_cur=session.get("cur", "EUR"),
+        used=[x[0] for x in db().execute("SELECT DISTINCT currency FROM receipts ORDER BY currency")])
 
 @app.post("/upload")
 def upload():
     last = None
+    cur = (request.form.get("currency") or "EUR").upper()[:3]; session["cur"] = cur
     for f in request.files.getlist("file"):
         if not f.filename: continue
         ext = os.path.splitext(f.filename)[1].lower() or ".jpg"
         path = os.path.join(UP, uuid.uuid4().hex + ext); f.save(path)
-        last = add_receipt(path, {"title": request.form.get("title","").strip()[:200]})
+        last = add_receipt(path, {"title": request.form.get("title","").strip()[:200], "currency": cur})
     if last: flash("Receipt added · please review the details"); return redirect(url_for("edit", rid=last))
     return redirect("/")
 
@@ -161,7 +177,7 @@ def edit(rid):
     if request.method == "POST":
         f = request.form
         db().execute("UPDATE receipts SET title=?,date=?,merchant=?,amount=?,currency=?,category=?,notes=?,status=? WHERE id=?",
-            (f.get("title","").strip()[:200], f["date"], f["merchant"], float(f["amount"] or 0), f["currency"].upper(), f["category"], f["notes"], f["status"], rid))
+            (f.get("title","").strip()[:200], f["date"], f["merchant"], float(f["amount"] or 0), f["currency"].upper()[:3], f["category"], f["notes"], f["status"], rid))
         flash("Changes saved"); return redirect("/")
     r = db().execute("SELECT * FROM receipts WHERE id=?", (rid,)).fetchone()
     return render_template_string(EDIT, r=r, cats=CATS, statuses=STATUSES) if r else ("Not found", 404)

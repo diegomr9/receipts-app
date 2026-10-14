@@ -49,7 +49,7 @@ def build_pdf(rows, thumbs_dir):
           Paragraph("Expense report", TITLE), Spacer(1, 5*mm),
           Paragraph(f"{len(rows)} {'receipt' if len(rows)==1 else 'receipts'}" + (f" &nbsp;·&nbsp; {fecha(dates[0])} – {fecha(dates[-1])}" if dates else "") + f" &nbsp;·&nbsp; issued {hoy}", LBL),
           Spacer(1, 12*mm)]
-    totline = " &nbsp;&nbsp; ".join(f"{money(v)} <font name='{SANS}' size='8' color='#82847f'>{c}</font>" for c, v in tot.items()) or "0,00"
+    totline = " &nbsp;&nbsp; ".join(f"{money(v)} <font name='{SANS}' size='8' color='#82847f'>{c}</font>" for c, v in tot.items()) or "0.00"
     el += [Paragraph("TOTAL", LBL), Spacer(1, 2*mm), Paragraph(totline, ParagraphStyle("tt", parent=TITLE, fontSize=30, leading=36)), Spacer(1, 14*mm)]
     hdr = [Paragraph(x, ParagraphStyle("hh", parent=LBL, alignment=a)) for x, a in
            [("NO.", 0), ("DATE", 0), ("DESCRIPTION", 0), ("CATEGORY", 0), ("STATUS", 0), ("AMOUNT", TA_RIGHT)]]
