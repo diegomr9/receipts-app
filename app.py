@@ -36,6 +36,8 @@ def db():
         g.db.execute("""CREATE TABLE IF NOT EXISTS receipts(id INTEGER PRIMARY KEY, date TEXT, merchant TEXT,
           amount REAL, currency TEXT DEFAULT 'EUR', category TEXT DEFAULT 'other', notes TEXT DEFAULT '',
           status TEXT DEFAULT 'to submit', file TEXT, preview TEXT, ocr_text TEXT, created TEXT)""")
+        cols = [c[1] for c in g.db.execute("PRAGMA table_info(receipts)")]
+        if "title" not in cols: g.db.execute("ALTER TABLE receipts ADD COLUMN title TEXT DEFAULT ''")
     return g.db
 @app.teardown_appcontext
 def close(e):
@@ -97,8 +99,8 @@ def add_receipt(path, fields=None):
     prev = make_preview(path)
     text = ocr(prev) if prev else ""
     f = parse(text); f.update(fields or {})
-    cur = db().execute("INSERT INTO receipts(date,merchant,amount,currency,category,notes,status,file,preview,ocr_text,created) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-        (f.get("date", datetime.date.today().isoformat()), f.get("merchant",""), f.get("amount",0) or 0, f.get("currency","EUR"),
+    cur = db().execute("INSERT INTO receipts(title,date,merchant,amount,currency,category,notes,status,file,preview,ocr_text,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        (f.get("title",""), f.get("date", datetime.date.today().isoformat()), f.get("merchant",""), f.get("amount",0) or 0, f.get("currency","EUR"),
          f.get("category","other"), f.get("notes",""), f.get("status","to submit"), os.path.basename(path), prev, text, datetime.datetime.now().isoformat()))
     return cur.lastrowid
 
@@ -114,53 +116,8 @@ def selected(form):
     if ids: return db().execute("SELECT * FROM receipts WHERE id IN (%s) ORDER BY date" % ",".join("?"*len(ids)), ids).fetchall()
     return list(reversed(query(form)))
 
-CSS = """<meta name=viewport content="width=device-width,initial-scale=1"><style>
-*{box-sizing:border-box}body{font-family:system-ui,sans-serif;margin:0;background:#f4f6f8;color:#222}
-header{background:#1f6feb;color:#fff;padding:14px 18px}header a{color:#fff;text-decoration:none;font-weight:600;font-size:20px}
-main{max-width:1000px;margin:auto;padding:14px}.card{background:#fff;border-radius:10px;padding:14px;margin-bottom:14px;box-shadow:0 1px 3px #0002}
-input,select,textarea,button{font:inherit;padding:8px;border:1px solid #ccc;border-radius:6px}button{background:#1f6feb;color:#fff;border:0;cursor:pointer}
-button.sec{background:#6e7781}.row{display:flex;flex-wrap:wrap;gap:8px;align-items:end}.row label{display:flex;flex-direction:column;font-size:13px;gap:3px}
-.tot{display:flex;gap:10px;flex-wrap:wrap}.tot div{flex:1;min-width:140px;background:#fff;border-radius:10px;padding:12px;box-shadow:0 1px 3px #0002}
-.tot b{display:block;font-size:20px}.item{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid #eee}
-.item img{width:64px;height:64px;object-fit:cover;border-radius:6px;background:#ddd}.grow{flex:1}.amt{font-weight:600;white-space:nowrap}
-.badge{font-size:12px;padding:2px 8px;border-radius:10px;background:#eee}.b-to{background:#fff3cd}.b-submitted{background:#cfe2ff}.b-reimbursed{background:#d1e7dd}
-.flash{background:#d1e7dd;padding:10px;border-radius:8px;margin-bottom:10px}a{color:#1f6feb}
-</style>"""
-INDEX = CSS + """<title>Receipts</title><header><a href="/">🧾 My Receipts</a></header><main>
-<div style="text-align:right"><a href="/logout">Log out</a></div>{% for m in get_flashed_messages() %}<div class=flash>{{m}}</div>{% endfor %}
-<div class=card><form method=post action="/upload" enctype=multipart/form-data class=row>
-<label>Add receipt (photo or PDF)<input type=file name=file accept="image/*,application/pdf" capture="environment" required multiple></label>
-<button>Upload &amp; auto-fill</button></form></div>
-<div class=tot>{% for s in statuses %}<div>{{s|capitalize}}<b>{% for c,v in totals[s].items() %}{{"%.2f"|format(v)}} {{c}}<br>{% else %}0.00{% endfor %}</b><small>{{counts[s]}} receipt(s)</small></div>{% endfor %}</div><br>
-<div class=card><form method=get class=row>
-<label>Status<select name=status><option value="">All</option>{% for s in statuses %}<option {{'selected' if a.status==s}}>{{s}}</option>{% endfor %}</select></label>
-<label>From<input type=date name=start value="{{a.start or ''}}"></label><label>To<input type=date name=end value="{{a.end or ''}}"></label>
-<button>Filter</button><a href="/">Clear</a></form></div>
-<form method=post class=card>
-<input type=hidden name=status value="{{a.status or ''}}"><input type=hidden name=start value="{{a.start or ''}}"><input type=hidden name=end value="{{a.end or ''}}">
-<div class=row><label style="flex-direction:row;align-items:center"><input type=checkbox onclick="document.querySelectorAll('.ck').forEach(c=>c.checked=this.checked)"> Select all</label>
-<button formaction="/bulk?to=submitted">Mark submitted</button><button formaction="/bulk?to=reimbursed">Mark reimbursed</button>
-<button class=sec formaction="/export.csv">Export CSV</button><button class=sec formaction="/export.pdf">Export PDF report</button></div>
-<small>Exports use the selected receipts, or all filtered ones if none are selected.</small>
-{% for r in rows %}<div class=item><input type=checkbox class=ck name=ids value={{r.id}}>
-<a href="/edit/{{r.id}}"><img src="/thumbs/{{r.preview}}" alt=""></a>
-<div class=grow><a href="/edit/{{r.id}}"><b>{{r.merchant or '(no merchant)'}}</b></a><br><small>{{r.date}} · {{r.category}}</small>
- <span class="badge b-{{r.status.split()[0]}}">{{r.status}}</span></div><div class=amt>{{"%.2f"|format(r.amount)}} {{r.currency}}</div></div>
-{% else %}<p>No receipts yet.</p>{% endfor %}</form></main>"""
-EDIT = CSS + """<title>Edit receipt</title><header><a href="/">🧾 My Receipts</a></header><main><div class=card>
-<a href="/uploads/{{r.file}}" target=_blank><img src="/thumbs/{{r.preview}}" style="max-width:100%;max-height:420px;border-radius:8px"></a>
-<form method=post class=row style="margin-top:10px">
-<label>Date<input type=date name=date value="{{r.date}}"></label><label>Merchant<input name=merchant value="{{r.merchant}}"></label>
-<label>Amount<input type=number step=0.01 name=amount value="{{r.amount}}"></label><label>Currency<input name=currency value="{{r.currency}}" size=4></label>
-<label>Category<select name=category>{% for c in cats %}<option {{'selected' if r.category==c}}>{{c}}</option>{% endfor %}</select></label>
-<label>Status<select name=status>{% for s in statuses %}<option {{'selected' if r.status==s}}>{{s}}</option>{% endfor %}</select></label>
-<label style="flex-basis:100%">Notes<textarea name=notes rows=2>{{r.notes}}</textarea></label>
-<button>Save</button><button class=sec formaction="/delete/{{r.id}}" onclick="return confirm('Delete this receipt?')">Delete</button></form>
-{% if r.ocr_text %}<details><summary>OCR text</summary><pre style="white-space:pre-wrap">{{r.ocr_text}}</pre></details>{% endif %}</div></main>"""
-
-LOGIN = CSS + """<title>Login</title><header><a href="/">🧾 My Receipts</a></header><main><div class=card>
-{% if err %}<div class=flash style="background:#f8d7da">{{err}}</div>{% endif %}
-<form method=post class=row><label>Password<input type=password name=password autofocus required></label><button>Log in</button></form></div></main>"""
+from ui import INDEX, EDIT, LOGIN, STATUS_ES, CAT_ES, fecha, money
+app.jinja_env.globals.update(ST=STATUS_ES, CAT=CAT_ES, fecha=fecha, money=money)
 @app.route("/login", methods=["GET","POST"])
 def login():
     err = None
@@ -168,10 +125,10 @@ def login():
         ip = request.remote_addr
         n, t = FAILS.get(ip, (0, 0))
         import time
-        if n >= 5 and time.time() - t < 300: err = "Too many attempts, wait 5 minutes."
+        if n >= 5 and time.time() - t < 300: err = "Too many attempts. Please wait five minutes."
         elif check_password_hash(CFG["password_hash"], request.form.get("password","")):
             FAILS.pop(ip, None); session.clear(); session["ok"] = True; session.permanent = True; return redirect("/")
-        else: FAILS[ip] = (n+1, time.time()); err = "Wrong password."
+        else: FAILS[ip] = (n+1, time.time()); err = "Incorrect password."
     return render_template_string(LOGIN, err=err)
 @app.get("/healthz")
 def healthz(): return "ok"
@@ -195,66 +152,46 @@ def upload():
         if not f.filename: continue
         ext = os.path.splitext(f.filename)[1].lower() or ".jpg"
         path = os.path.join(UP, uuid.uuid4().hex + ext); f.save(path)
-        last = add_receipt(path)
-    if last: flash("Uploaded. Check the auto-filled fields."); return redirect(url_for("edit", rid=last))
+        last = add_receipt(path, {"title": request.form.get("title","").strip()[:200]})
+    if last: flash("Receipt added · please review the details"); return redirect(url_for("edit", rid=last))
     return redirect("/")
 
 @app.route("/edit/<int:rid>", methods=["GET","POST"])
 def edit(rid):
     if request.method == "POST":
         f = request.form
-        db().execute("UPDATE receipts SET date=?,merchant=?,amount=?,currency=?,category=?,notes=?,status=? WHERE id=?",
-            (f["date"], f["merchant"], float(f["amount"] or 0), f["currency"].upper(), f["category"], f["notes"], f["status"], rid))
-        flash("Saved."); return redirect("/")
+        db().execute("UPDATE receipts SET title=?,date=?,merchant=?,amount=?,currency=?,category=?,notes=?,status=? WHERE id=?",
+            (f.get("title","").strip()[:200], f["date"], f["merchant"], float(f["amount"] or 0), f["currency"].upper(), f["category"], f["notes"], f["status"], rid))
+        flash("Changes saved"); return redirect("/")
     r = db().execute("SELECT * FROM receipts WHERE id=?", (rid,)).fetchone()
     return render_template_string(EDIT, r=r, cats=CATS, statuses=STATUSES) if r else ("Not found", 404)
 
 @app.post("/delete/<int:rid>")
 def delete(rid):
-    db().execute("DELETE FROM receipts WHERE id=?", (rid,)); flash("Deleted."); return redirect("/")
+    db().execute("DELETE FROM receipts WHERE id=?", (rid,)); flash("Receipt deleted"); return redirect("/")
 
 @app.post("/bulk")
 def bulk():
     to = request.args.get("to"); ids = [int(i) for i in request.form.getlist("ids")]
     if to in STATUSES and ids:
         db().execute("UPDATE receipts SET status=? WHERE id IN (%s)" % ",".join("?"*len(ids)), [to]+ids)
-        flash(f"Marked {len(ids)} receipt(s) as {to}.")
-    else: flash("Select at least one receipt.")
+        flash(f"{len(ids)} marked as {STATUS_ES[to].lower()}")
+    else: flash("Select at least one receipt")
     return redirect("/")
 
 @app.post("/export.csv")
 def export_csv():
-    out = io.StringIO(); w = csv.writer(out)
-    w.writerow(["id","date","merchant","amount","currency","category","status","notes","file"])
+    out = io.StringIO(); out.write("\ufeff"); w = csv.writer(out)
+    w.writerow(["id","date","title","merchant","amount","currency","category","status","notes","file"])
     for r in selected(request.form):
-        w.writerow([r["id"],r["date"],r["merchant"],"%.2f"%r["amount"],r["currency"],r["category"],r["status"],r["notes"],r["file"]])
+        w.writerow([r["id"],r["date"],r["title"] or "",r["merchant"],"%.2f"%r["amount"],r["currency"],CAT_ES.get(r["category"],r["category"]),STATUS_ES.get(r["status"],r["status"]),r["notes"],r["file"]])
     return Response(out.getvalue(), mimetype="text/csv", headers={"Content-Disposition":"attachment; filename=receipts.csv"})
 
 @app.post("/export.pdf")
 def export_pdf():
-    from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image as RLImage
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.lib import colors
-    rows = selected(request.form); ss = getSampleStyleSheet(); buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, title="Expense report")
-    el = [Paragraph("Expense claim report", ss["Title"]), Paragraph("Generated " + datetime.date.today().isoformat(), ss["Normal"]), Spacer(1,12)]
-    data = [["#","Date","Merchant","Category","Status","Amount"]]; tot = {}
-    for i, r in enumerate(rows, 1):
-        data.append([i, r["date"], (r["merchant"] or "")[:30], r["category"], r["status"], "%.2f %s" % (r["amount"], r["currency"])])
-        tot[r["currency"]] = tot.get(r["currency"],0) + r["amount"]
-    for c, v in tot.items(): data.append(["","","","","Total", "%.2f %s" % (v, c)])
-    t = Table(data, repeatRows=1); t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#1f6feb")),("TEXTCOLOR",(0,0),(-1,0),colors.white),
-        ("GRID",(0,0),(-1,-1),0.4,colors.grey),("ALIGN",(-1,0),(-1,-1),"RIGHT"),("FONTSIZE",(0,0),(-1,-1),9)]))
-    el.append(t)
-    for i, r in enumerate(rows, 1):
-        el += [PageBreak(), Paragraph(f"#{i} – {r['merchant']} – {r['date']} – {r['amount']:.2f} {r['currency']} ({r['category']})", ss["Heading3"])]
-        if r["notes"]: el.append(Paragraph("Notes: " + r["notes"], ss["Normal"]))
-        if r["preview"]:
-            p = os.path.join(TH, r["preview"]); w, h = Image.open(p).size; s = min(480/w, 640/h)
-            el.append(RLImage(p, w*s, h*s))
-    doc.build(el)
-    return Response(buf.getvalue(), mimetype="application/pdf", headers={"Content-Disposition":"attachment; filename=expense_report.pdf"})
+    from pdfreport import build_pdf
+    return Response(build_pdf(selected(request.form), TH), mimetype="application/pdf",
+                    headers={"Content-Disposition":"attachment; filename=expense_report.pdf"})
 
 @app.route("/uploads/<path:f>")
 def uploads(f): return send_from_directory(UP, f)

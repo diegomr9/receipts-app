@@ -4,7 +4,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr p
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py .
+COPY app.py ui.py pdfreport.py ./
+COPY fonts ./fonts
 ENV DATA_DIR=/tmp/data PORT=10000 PYTHONUNBUFFERED=1
 RUN mkdir -p /tmp/data
 # One worker: SQLite + in-memory login lockout; threads handle concurrency. Long timeout for OCR/PDF.
