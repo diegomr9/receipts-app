@@ -70,7 +70,8 @@ def build_pdf(rows, thumbs_dir):
     data = [[Paragraph(x, HDR if x != "AMOUNT" else st("hr", parent=HDR, alignment=TA_RIGHT)) for x in ["#", "DATE", "TITLE", "MERCHANT", "CATEGORY", "AMOUNT"]]]
     for i, r in enumerate(rows, 1):
         data.append([Paragraph(str(i), st("n", fontSize=8.5, textColor=MUTED)), Paragraph(fecha(r["date"]), CELL),
-                     Paragraph(r["title"] or "—", CELLB), Paragraph(r["merchant"] or "—", st("m", fontSize=8, leading=11, textColor=TEXT2)),
+                     Paragraph((r["title"] or "—") + ("" if r["file"] else "<br/><font name='Inter' size='6.5' color='#b54708'>NO RECEIPT</font>"), CELLB),
+                     Paragraph(r["merchant"] or ("—" if r["file"] else "No receipt"), st("m", fontSize=8, leading=11, textColor=TEXT2)),
                      Paragraph(CAT_ES.get(r["category"], r["category"]), CELL),
                      Paragraph(f"{money(r['amount'])} <font size='7.5' color='#667085'>{r['currency']}</font>", st("a", parent=CELLB, alignment=TA_RIGHT))])
     for c, v in tot:
@@ -88,14 +89,27 @@ def build_pdf(rows, thumbs_dir):
         el.append(Paragraph(f"RECEIPT {i} OF {n}", HDR)); el.append(Spacer(1, 2*mm))
         el.append(Paragraph(r["title"] or r["merchant"] or "—", st("rt", fontName=B, fontSize=15, leading=19))); el.append(Spacer(1, 4*mm))
         meta = [[Paragraph("MERCHANT", HDR), Paragraph("DATE", HDR), Paragraph("CATEGORY", HDR), Paragraph("AMOUNT", st("hr2", parent=HDR, alignment=TA_RIGHT))],
-                [Paragraph(r["merchant"] or "—", CELL), Paragraph(fecha(r["date"]), CELL), Paragraph(CAT_ES.get(r["category"], r["category"]), CELL),
+                [Paragraph(r["merchant"] or ("—" if r["file"] else "No receipt"), CELL), Paragraph(fecha(r["date"]), CELL), Paragraph(CAT_ES.get(r["category"], r["category"]), CELL),
                  Paragraph(f"{money(r['amount'])} {r['currency']}", st("ma", parent=CELLB, fontSize=11, alignment=TA_RIGHT))]]
         mt = Table(meta, colWidths=[W*0.38, W*0.20, W*0.20, W*0.22])
         mt.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.6, BORDER), ("BACKGROUND", (0, 0), (-1, 0), SUBTLE), ("LINEBELOW", (0, 0), (-1, 0), 0.5, BORDER),
             ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8)]))
         el.append(mt)
-        if r["notes"]: el += [Spacer(1, 3*mm), Paragraph(f"<font name='{B}'>Notes</font> &nbsp;{r['notes']}", st("nt", textColor=TEXT2))]
+        if r["notes"] and r["file"]: el += [Spacer(1, 3*mm), Paragraph(f"<font name='{B}'>Notes</font> &nbsp;{r['notes']}", st("nt", textColor=TEXT2))]
         el.append(Spacer(1, 5*mm))
+        if not r["file"]:
+            rows_ = [[Paragraph("NO RECEIPT", st("nr", fontName=B, fontSize=7.5, textColor=colors.HexColor("#b54708"))), ""],
+                     [Paragraph("This expense has no receipt. It was recorded manually.", st("nr2", fontSize=9.5, textColor=TEXT2)), ""],
+                     [Paragraph("Title", HDR), Paragraph(r["title"] or "—", CELLB)],
+                     [Paragraph("Date", HDR), Paragraph(fecha(r["date"]), CELL)],
+                     [Paragraph("Category", HDR), Paragraph(CAT_ES.get(r["category"], r["category"]), CELL)],
+                     [Paragraph("Amount", HDR), Paragraph(f"{money(r['amount'])} {r['currency']}", st("na", fontName=B, fontSize=11))],
+                     [Paragraph("Note", HDR), Paragraph(r["notes"] or "—", CELL)]]
+            nc = Table(rows_, colWidths=[30*mm, W - 30*mm])
+            nc.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.6, BORDER), ("BACKGROUND", (0, 0), (-1, 1), colors.HexColor("#fffaeb")),
+                ("SPAN", (0, 0), (-1, 0)), ("SPAN", (0, 1), (-1, 1)), ("LINEBELOW", (0, 1), (-1, -2), 0.5, BORDER), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 12), ("RIGHTPADDING", (0, 0), (-1, -1), 12), ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))
+            el.append(nc)
         if r["preview"]:
             p = os.path.join(thumbs_dir, r["preview"])
             if os.path.exists(p):

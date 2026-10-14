@@ -2,7 +2,7 @@
 # (warm sand palette, thin serif display type, spaced uppercase labels, hairlines, slow transitions).
 STATUS_ES = {"to submit": "To submit", "submitted": "Submitted", "reimbursed": "Reimbursed"}
 CAT_ES = {"meals": "Meals", "travel": "Travel", "transport": "Transport", "lodging": "Lodging",
-          "supplies": "Supplies", "other": "Other"}
+          "supplies": "Supplies", "tips": "Tips", "other": "Other"}
 MESES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 CUR_INFO = {  # code: (symbol, name)
@@ -129,6 +129,13 @@ input[type=checkbox]:checked:after{content:"";position:absolute;left:4.5px;top:1
 .row{min-height:64px;padding-top:10px;padding-bottom:10px;border-bottom:1px solid var(--border);transition:background .12s}
 .row:last-child{border-bottom:0}.row:hover{background:#fafbfc}
 .thumb{width:44px;height:44px;border-radius:8px;overflow:hidden;background:var(--subtle);border:1px solid var(--border);display:block}
+.thumb.norec{display:grid;place-items:center;color:#98a2b3;background:repeating-linear-gradient(135deg,#f6f7f9 0 6px,#eef0f3 6px 12px);border-style:dashed}
+.nobadge{display:inline-flex;align-items:center;height:18px;padding:0 6px;margin-right:6px;border-radius:5px;background:#f2f4f7;border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:600;vertical-align:1px}
+.ph-act{display:flex;gap:8px;flex-wrap:wrap}
+.err-t{color:#b42318;font-size:12.5px}.inv{border-color:#fda29b!important}
+.req{color:#b42318}
+.noprev{padding:28px 18px;text-align:center}.noprev .ic{width:52px;height:52px;border-radius:12px;margin:0 auto 12px;display:grid;place-items:center;color:#98a2b3;background:repeating-linear-gradient(135deg,#f6f7f9 0 6px,#eef0f3 6px 12px);border:1px dashed var(--border2)}
+.noprev b{display:block;font-size:15px}.noprev p{color:var(--muted);margin:4px 0 16px}
 .thumb img{width:100%;height:100%;object-fit:cover}
 .ttl{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ttl:hover{color:var(--accent)}
@@ -173,7 +180,7 @@ details.ocr pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;font:12.5px/1.
 @media (max-width:1080px){.grid{grid-template-columns:1fr}.side{position:static;order:-1}.stats{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:760px){
  main{padding:18px 14px 70px}.bar-in{padding:0 14px}
- .ph h1{font-size:21px}.ph .btn{display:none}
+ .ph h1{font-size:21px}.ph-act{width:100%}.ph-act .btn{flex:1}
  .stats{gap:10px}.stat{padding:13px 14px}.stat .v{font-size:18px}
  .fbar{padding:12px 14px}.fbar .field{width:calc(50% - 5px)}.fbar .btns{width:100%;display:flex;gap:8px}.fbar .btns .btn{flex:1}
  .abar{padding:10px 14px}.abar .r{width:100%}.abar .r .btn{flex:1}
@@ -193,6 +200,8 @@ ICON_UP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-wid
 ICON_DOC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>'
 ICON_CAM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>'
 ICON_LOGO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>'
+ICON_NOREC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M3 3l18 18"/></svg>'
+ICON_PEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>'
 ICON_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
 
 TOP = """{% macro curopts(sel, extra=None) %}{% for c in CUR_MAIN %}<option value="{{c}}" {{'selected' if sel==c}}>{{c}} · {{CUR_INFO[c][0]}} · {{CUR_INFO[c][1]}}</option>{% endfor %}
@@ -204,7 +213,7 @@ TOP = """{% macro curopts(sel, extra=None) %}{% for c in CUR_MAIN %}<option valu
 
 INDEX = HEAD + """<title>Expenses · Receipts</title></head><body>""" + TOP + """<main>
 <div class=ph><div><h1>Expenses</h1><p>Track receipts from upload to reimbursement.</p></div>
-<a href="#add" class=btn>""" + ICON_PLUS + """ New receipt</a></div>
+<div class=ph-act><a href="/new" class="btn sec">""" + ICON_PEN + """ Add expense</a><a href="#add" class=btn>""" + ICON_PLUS + """ New receipt</a></div></div>
 <section class=stats>{% for s in statuses %}<div class="card stat"><div class=k><span class="dot d-{{s.split()[0]}}"></span>{{ST[s]}}</div>
 {% set tl = cur_sorted(totals[s]) %}<div class="lines{{' multi' if tl|length > 1}}">{% for c,v in tl %}<div class=ln><span class=sy>{{sym(c)}}</span>{{money(v)}}<small>{{c}}</small></div>{% else %}<div class=ln>0.00</div>{% endfor %}</div>
 <div class=f>{{counts[s]}} {{'receipt' if counts[s]==1 else 'receipts'}}</div></div>{% endfor %}
@@ -228,8 +237,8 @@ INDEX = HEAD + """<title>Expenses · Receipts</title></head><body>""" + TOP + ""
 <div class=thead><span></span><span></span><span>Receipt</span><span>Date</span><span>Category</span><span>Status</span><span class=ra>Amount</span></div>
 {% for r in rows %}<div class=row>
 <span class=ck-w><input type=checkbox class=ck name=ids value={{r.id}} aria-label="Select"></span>
-<a class=thumb href="/edit/{{r.id}}">{% if r.preview %}<img src="/thumbs/{{r.preview}}" alt="" loading=lazy>{% endif %}</a>
-<div class=main><a href="/edit/{{r.id}}" class=ttl style="display:block">{{r.title or r.merchant or 'Untitled'}}</a><div class=mer>{{r.merchant or 'Unknown merchant'}}</div></div>
+{% if r.file %}<a class=thumb href="/edit/{{r.id}}">{% if r.preview %}<img src="/thumbs/{{r.preview}}" alt="" loading=lazy>{% endif %}</a>{% else %}<a class="thumb norec" href="/edit/{{r.id}}" title="No receipt">""" + ICON_NOREC + """</a>{% endif %}
+<div class=main><a href="/edit/{{r.id}}" class=ttl style="display:block">{{r.title or r.merchant or 'Untitled'}}</a><div class=mer>{% if not r.file %}<span class=nobadge>No receipt</span>{% endif %}{{r.merchant or ('Manual expense' if not r.file else 'Unknown merchant')}}</div></div>
 <span class=date>{{fecha(r.date)}}</span>
 <span class=cat-c><span class=chip>{{CAT.get(r.category, r.category)}}</span></span>
 <span class=st-c><span class="pill p-{{r.status.split()[0]}}">{{ST.get(r.status, r.status)}}</span></span>
@@ -267,10 +276,15 @@ document.getElementById('up').addEventListener('submit',ev=>{if(!f.files.length&
 
 EDIT = HEAD + """<title>{{r.title or r.merchant or 'Receipt'}} · Receipts</title></head><body>""" + TOP + """<main>
 <div class=ph><div><div class=crumb><a href="/">Expenses</a> / Receipt #{{r.id}}</div><h1>{{r.title or r.merchant or 'Untitled'}}</h1>
-<p>{{r.merchant or 'Unknown merchant'}} · {{fecha(r.date)}} · <span class="pill p-{{r.status.split()[0]}}" style="vertical-align:1px">{{ST.get(r.status, r.status)}}</span></p></div></div>
+<p>{% if not r.file %}<span class=nobadge>No receipt</span>{% endif %}{{r.merchant or ('Manual expense' if not r.file else 'Unknown merchant')}} · {{fecha(r.date)}} · <span class="pill p-{{r.status.split()[0]}}" style="vertical-align:1px">{{ST.get(r.status, r.status)}}</span></p></div></div>
 <div class=edit>
-<div class="card preview">{% if r.preview %}<a href="/uploads/{{r.file}}" target=_blank><img src="/thumbs/{{r.preview}}" alt="Receipt"></a>{% endif %}
+{% if r.file %}<div class="card preview">{% if r.preview %}<a href="/uploads/{{r.file}}" target=_blank><img src="/thumbs/{{r.preview}}" alt="Receipt"></a>{% endif %}
 <div class=pf><span>{{r.file.rsplit('.',1)[-1]|upper}} file</span><a href="/uploads/{{r.file}}" target=_blank>View original ↗</a></div></div>
+{% else %}<div class="card preview"><div class=noprev><div class=ic>""" + ICON_NOREC + """</div><b>No receipt attached</b><p>This is a manual expense. You can attach a photo or PDF later; empty fields will be filled from it.</p>
+<form method=post action="/attach/{{r.id}}" enctype=multipart/form-data id=att><input type=file name=file accept="image/*,application/pdf,.heic,.heif" id=attf style="position:absolute;width:1px;height:1px;opacity:0">
+<div class=pick style="margin-top:0"><label for=attf class="btn sec">""" + ICON_DOC + """ Choose file</label><button class=btn>Attach</button></div><div class=files id=attn></div></form>
+<script>const af=document.getElementById('attf');af.addEventListener('change',()=>{document.getElementById('attn').textContent=[...af.files].map(x=>x.name).join(' · ')});
+document.getElementById('att').addEventListener('submit',e=>{if(!af.files.length){e.preventDefault();document.getElementById('attn').textContent='Choose a file first.'}})</script></div></div>{% endif %}
 <div><form method=post class=card><div class=card-h><h2>Details</h2></div><div class="card-b fg">
 <label class="field full"><span>Title / description</span><input name=title value="{{r.title or ''}}" placeholder="e.g. Aquapark for Argentina" maxlength=200></label>
 <label class="field full"><span>Merchant</span><input name=merchant value="{{r.merchant}}"></label>
@@ -291,3 +305,17 @@ LOGIN = HEAD + """<title>Sign in · Receipts</title></head><body><div class=logi
 <form method=post><label class=field><span>Password</span><input type=password name=password autocomplete=current-password autofocus required></label>
 {% if err %}<div class=err>{{err}}</div>{% endif %}<button class=btn>Sign in</button></form>
 <div class=lf>Private workspace · Work expenses</div></div></div></body></html>"""
+
+
+NEW = HEAD + """<title>Add expense · Receipts</title></head><body>""" + TOP + """<main>
+<div class=ph><div><div class=crumb><a href="/">Expenses</a> / Add expense</div><h1>Add expense</h1><p>Record an expense without a receipt, such as a tip. You can attach a receipt later.</p></div></div>
+<form method=post class=card style="max-width:720px" novalidate><div class=card-h><div><h2>Expense details</h2><div class=sub>Fields marked <span class=req>*</span> are required</div></div><span class=nobadge>No receipt</span></div>
+<div class="card-b fg">
+<label class="field full"><span>Title <span class=req>*</span></span><input name=title value="{{v.title}}" placeholder="e.g. Tip for hotel staff" maxlength=200 required autofocus class="{{'inv' if errs.title}}">{% if errs.title %}<span class=err-t>{{errs.title}}</span>{% endif %}</label>
+<label class=field><span>Date</span><input type=date name=date value="{{v.date}}"></label>
+<label class=field><span>Category</span><select name=category>{% for c in cats %}<option value="{{c}}" {{'selected' if v.category==c}}>{{CAT[c]}}</option>{% endfor %}</select></label>
+<label class=field><span>Amount <span class=req>*</span></span><input type=number step=0.01 min=0.01 inputmode=decimal name=amount value="{{v.amount}}" placeholder="0.00" required class="num-t {{'inv' if errs.amount}}">{% if errs.amount %}<span class=err-t>{{errs.amount}}</span>{% endif %}</label>
+<label class=field><span>Currency</span><select name=currency>{{curopts(v.currency)}}</select></label>
+<label class="field full"><span>Note</span><textarea name=notes rows=3 placeholder="e.g. Tip on behalf of my boss">{{v.notes}}</textarea></label>
+<label class="field full"><span>Status</span><select name=status>{% for s in statuses %}<option value="{{s}}" {{'selected' if v.status==s}}>{{ST[s]}}</option>{% endfor %}</select></label></div>
+<div class=acts><button class=btn>Add expense</button><a href="/" class="btn sec">Cancel</a></div></form></main></body></html>"""

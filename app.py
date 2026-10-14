@@ -9,7 +9,7 @@ DATA = os.environ.get("DATA_DIR", BASE)
 UP = os.path.join(DATA, "uploads"); TH = os.path.join(DATA, "thumbs")
 for d in (UP, TH): os.makedirs(d, exist_ok=True)
 DB = os.path.join(DATA, "receipts.db")
-CATS = ["meals","travel","transport","lodging","supplies","other"]
+CATS = ["meals","travel","transport","lodging","supplies","tips","other"]
 STATUSES = ["to submit","submitted","reimbursed"]
 import json, datetime as _dt
 from werkzeug.security import check_password_hash
@@ -139,7 +139,7 @@ def selected(form):
     if ids: return db().execute("SELECT * FROM receipts WHERE id IN (%s) ORDER BY date" % ",".join("?"*len(ids)), ids).fetchall()
     return list(reversed(query(form)))
 
-from ui import INDEX, EDIT, LOGIN, STATUS_ES, CAT_ES, fecha, money, CUR_MAIN, CUR_OTHER, CUR_INFO, cur_sorted, sym
+from ui import INDEX, EDIT, LOGIN, NEW, STATUS_ES, CAT_ES, fecha, money, CUR_MAIN, CUR_OTHER, CUR_INFO, cur_sorted, sym
 CODES = list(CUR_INFO)
 app.jinja_env.globals.update(ST=STATUS_ES, CAT=CAT_ES, fecha=fecha, money=money, CUR_MAIN=CUR_MAIN, CUR_OTHER=CUR_OTHER, CUR_INFO=CUR_INFO, cur_sorted=cur_sorted, sym=sym)
 @app.route("/login", methods=["GET","POST"])
@@ -182,6 +182,46 @@ def upload():
     if last: flash("Receipt added · please review the details"); return redirect(url_for("edit", rid=last))
     return redirect("/")
 
+@app.route("/new", methods=["GET","POST"])
+def new_expense():
+    """Manual expense with no receipt file."""
+    today = datetime.date.today().isoformat()
+    v = {"title": "", "date": today, "amount": "", "currency": session.get("cur", "EUR"), "category": "tips", "notes": "", "status": "to submit"}
+    errs = {}
+    if request.method == "POST":
+        f = request.form
+        v.update({k: (f.get(k) or "").strip() for k in v})
+        v["currency"] = (v["currency"] or "EUR").upper()[:3]; v["date"] = v["date"] or today
+        if not v["title"]: errs["title"] = "Please enter a title."
+        try:
+            amt = float(v["amount"].replace(",", "."))
+            if amt <= 0: raise ValueError
+        except ValueError: errs["amount"] = "Please enter an amount greater than 0."
+        if v["category"] not in CATS: v["category"] = "other"
+        if v["status"] not in STATUSES: v["status"] = "to submit"
+        if not errs:
+            session["cur"] = v["currency"]
+            db().execute("INSERT INTO receipts(title,date,merchant,amount,currency,category,notes,status,file,preview,ocr_text,ocr_note,created) VALUES(?,?,?,?,?,?,?,?,NULL,NULL,'','',?)",
+                (v["title"][:200], v["date"], "", amt, v["currency"], v["category"], v["notes"], v["status"], datetime.datetime.now().isoformat()))
+            flash("Expense added"); return redirect("/")
+    return render_template_string(NEW, v=v, errs=errs, cats=CATS, statuses=STATUSES)
+
+@app.post("/attach/<int:rid>")
+def attach(rid):
+    """Attach a receipt file to an existing (manual) expense. OCR only fills fields that are empty."""
+    r = db().execute("SELECT * FROM receipts WHERE id=?", (rid,)).fetchone()
+    up = request.files.get("file")
+    if not r or not up or not up.filename: flash("Choose a file to attach"); return redirect(url_for("edit", rid=rid))
+    ext = os.path.splitext(up.filename)[1].lower() or ".jpg"
+    path = os.path.join(UP, uuid.uuid4().hex + ext); up.save(path)
+    prev = make_preview(path); text = extract_text(path, prev); d = parse(text)
+    merchant = r["merchant"] or d.get("merchant", "")
+    amount = r["amount"] if r["amount"] else d.get("amount", 0)
+    title = r["title"] or d.get("merchant", "")
+    db().execute("UPDATE receipts SET file=?,preview=?,ocr_text=?,ocr_note=?,merchant=?,amount=?,title=? WHERE id=?",
+                 (os.path.basename(path), prev, text, d.get("ocr_note", ""), merchant, amount, title, rid))
+    flash("Receipt attached"); return redirect(url_for("edit", rid=rid))
+
 @app.route("/edit/<int:rid>", methods=["GET","POST"])
 def edit(rid):
     if request.method == "POST":
@@ -208,9 +248,9 @@ def bulk():
 @app.post("/export.csv")
 def export_csv():
     out = io.StringIO(); out.write("\ufeff"); w = csv.writer(out)
-    w.writerow(["id","date","title","merchant","amount","currency","category","status","notes","file"])
+    w.writerow(["id","date","title","merchant","amount","currency","category","status","notes","has_receipt","file"])
     for r in selected(request.form):
-        w.writerow([r["id"],r["date"],r["title"] or "",r["merchant"],"%.2f"%r["amount"],r["currency"],CAT_ES.get(r["category"],r["category"]),STATUS_ES.get(r["status"],r["status"]),r["notes"],r["file"]])
+        w.writerow([r["id"],r["date"],r["title"] or "",r["merchant"],"%.2f"%r["amount"],r["currency"],CAT_ES.get(r["category"],r["category"]),STATUS_ES.get(r["status"],r["status"]),r["notes"],"yes" if r["file"] else "no",r["file"] or ""])
     return Response(out.getvalue(), mimetype="text/csv", headers={"Content-Disposition":"attachment; filename=receipts.csv"})
 
 @app.post("/export.pdf")
