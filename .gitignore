@@ -21,3 +21,4 @@ cloudflared
 screenshot.png
 PUBLIC_URL.txt
 __pycache__/
+.render_api_key
