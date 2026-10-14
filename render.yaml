@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: receipts-app
+    runtime: docker
+    plan: free               # free plan: no persistent disk, sleeps after 15 min idle
+    region: singapore        # closest to Kuala Lumpur
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATA_DIR
+        value: /tmp/data     # ephemeral: wiped on redeploy/restart/spin-down
+      - key: SECRET_KEY
+        generateValue: true
+      - key: PASSWORD_HASH
+        sync: false          # set at deploy time (werkzeug hash of the password)

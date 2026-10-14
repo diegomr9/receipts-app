@@ -1,0 +1,23 @@
+# secrets
+config.json
+PASSWORD.txt
+PASSWORD_HASH.txt
+.env
+*.pem
+# data
+*.db
+*.db-journal
+uploads/
+thumbs/
+# binaries, deps, logs
+venv/
+node_modules/
+package.json
+package-lock.json
+ngrok
+cloudflared
+*.log
+*.bak
+screenshot.png
+PUBLIC_URL.txt
+__pycache__/
