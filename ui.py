@@ -110,6 +110,7 @@ textarea{resize:vertical;line-height:1.5}
 .status.s-submitted:before{background:#a8987d}.status.s-reimbursed:before{background:#6f7d64}
 .empty{padding:70px 0;text-align:center;color:var(--stone)}
 .empty .serif{font-size:30px;color:var(--ink);margin-bottom:6px}
+.detect{font-size:12px;color:var(--stone);font-style:italic;margin-top:4px;line-height:1.4}
 .note{font-size:12.5px;color:var(--stone);margin-top:12px}
 /* flash */
 .flash{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:var(--sand);padding:14px 26px;
@@ -214,7 +215,7 @@ EDIT = HEAD + """<title>Receipt · {{r.title or r.merchant}}</title></head><body
 <label class=field><span class=label>Date</span><input type=date name=date value="{{r.date}}"></label>
 <label class=field><span class=label>Category</span><select name=category>{% for c in cats %}<option value="{{c}}" {{'selected' if r.category==c}}>{{CAT[c]}}</option>{% endfor %}</select></label>
 <label class=field><span class=label>Amount</span><input type=number step=0.01 inputmode=decimal name=amount value="{{'%.2f'|format(r.amount)}}"></label>
-<label class=field><span class=label>Currency</span><select name=currency>{{curopts(r.currency)}}</select></label>
+<label class=field><span class=label>Currency</span><select name=currency>{{curopts(r.currency)}}</select>{% if r.ocr_note %}<span class=detect>{{r.ocr_note}}</span>{% endif %}</label>
 <label class="field full"><span class=label>Status</span><select name=status>{% for s in statuses %}<option value="{{s}}" {{'selected' if r.status==s}}>{{ST[s]}}</option>{% endfor %}</select></label>
 <label class="field full"><span class=label>Notes</span><textarea name=notes rows=3>{{r.notes}}</textarea></label></div>
 <div class=actions><button class=btn>Save</button><a href="/" class="btn ghost">Back</a>

@@ -38,6 +38,7 @@ def db():
           status TEXT DEFAULT 'to submit', file TEXT, preview TEXT, ocr_text TEXT, created TEXT)""")
         cols = [c[1] for c in g.db.execute("PRAGMA table_info(receipts)")]
         if "title" not in cols: g.db.execute("ALTER TABLE receipts ADD COLUMN title TEXT DEFAULT ''")
+        if "ocr_note" not in cols: g.db.execute("ALTER TABLE receipts ADD COLUMN ocr_note TEXT DEFAULT ''")
     return g.db
 @app.teardown_appcontext
 def close(e):
@@ -65,6 +66,19 @@ def ocr(preview):
         return pytesseract.image_to_string(Image.open(os.path.join(TH, preview)))
     except Exception: return ""
 
+def extract_text(path, prev):
+    """OCR text. PDFs: use the text layer of all pages if present, otherwise OCR every page (max 10)."""
+    if path.lower().endswith(".pdf"):
+        try:
+            t = subprocess.run(["pdftotext", "-layout", path, "-"], capture_output=True, text=True, timeout=60).stdout
+            if len(t.strip()) > 20: return t
+            import tempfile, glob, pytesseract
+            with tempfile.TemporaryDirectory() as d:
+                subprocess.run(["pdftoppm", "-png", "-r", "200", "-l", "10", path, os.path.join(d, "p")], timeout=120)
+                return "\n".join(pytesseract.image_to_string(Image.open(p)) for p in sorted(glob.glob(os.path.join(d, "p*.png"))))
+        except Exception: return ""
+    return ocr(prev) if prev else ""
+
 def parse(text):
     r = {}
     lines = [l.strip() for l in text.splitlines() if len(l.strip()) > 2]
@@ -86,8 +100,11 @@ def parse(text):
         n = re.findall(r"\d+[.,]\d{2}", text)
         if n: amt = max(n, key=lambda x: float(x.replace(",", ".")))
     if amt: r["amount"] = float(amt.replace(",", "."))
-    cur = detect_currency(text)
-    if cur: r["currency"] = cur
+    from currency import detect
+    d = detect(text)
+    if d:
+        r["ocr_note"] = d["note"]
+        if d["confident"]: r["currency"] = d["currency"]
     low = text.lower()
     for cat, kws in [("meals",["restaurant","cafe","coffee","lunch","dinner","food"]),("lodging",["hotel","inn","night"]),
                      ("travel",["airline","flight","train","rail"]),("transport",["taxi","uber","fuel","parking","metro"]),
@@ -95,24 +112,13 @@ def parse(text):
         if any(k in low for k in kws): r["category"] = cat; break
     return r
 
-def detect_currency(text):
-    """Return an ISO code only when the receipt is unambiguous; bare '$' or '¥' is not enough."""
-    hits = set()
-    for c in CODES:
-        if re.search(r"(?<![A-Z])%s(?![A-Z])" % c, text): hits.add(c)
-    for c, pat in [("EUR", "€"), ("GBP", "£"), ("INR", "₹"), ("KRW", "₩"), ("THB", "฿"), ("PHP", "₱"), ("VND", "₫"),
-                   ("MYR", r"\bRM\s?\d"), ("SGD", r"S\$"), ("USD", r"US\$"), ("HKD", r"HK\$"), ("AUD", r"\bA\$"),
-                   ("CAD", r"\bC\$"), ("NZD", r"NZ\$"), ("IDR", r"\bRp\.?\s?\d"), ("BRL", r"R\$")]:
-        if re.search(pat, text): hits.add(c)
-    return hits.pop() if len(hits) == 1 else None
-
 def add_receipt(path, fields=None):
     prev = make_preview(path)
-    text = ocr(prev) if prev else ""
+    text = extract_text(path, prev)
     detected = parse(text); f = dict(detected); f.update({k: v for k, v in (fields or {}).items() if v})
-    if detected.get("currency"): f["currency"] = detected["currency"]  # confident OCR wins
-    cur = db().execute("INSERT INTO receipts(title,date,merchant,amount,currency,category,notes,status,file,preview,ocr_text,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-        (f.get("title",""), f.get("date", datetime.date.today().isoformat()), f.get("merchant",""), f.get("amount",0) or 0, f.get("currency","EUR"),
+    if detected.get("currency"): f["currency"] = detected["currency"]  # only set when confident
+    cur = db().execute("INSERT INTO receipts(ocr_note,title,date,merchant,amount,currency,category,notes,status,file,preview,ocr_text,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (f.get("ocr_note",""), f.get("title",""), f.get("date", datetime.date.today().isoformat()), f.get("merchant",""), f.get("amount",0) or 0, f.get("currency","EUR"),
          f.get("category","other"), f.get("notes",""), f.get("status","to submit"), os.path.basename(path), prev, text, datetime.datetime.now().isoformat()))
     return cur.lastrowid
 
